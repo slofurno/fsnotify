@@ -274,7 +274,7 @@ func (w *Watcher) readEvents() {
 				// Point "bytes" at the first byte of the filename
 				bytes := (*[unix.PathMax]byte)(unsafe.Pointer(&buf[offset+unix.SizeofInotifyEvent]))
 				// The filename is padded with NULL bytes. TrimRight() gets rid of those.
-				name += "/" + strings.TrimRight(string(bytes[0:nameLen]), "\000")
+				name = strings.TrimRight(string(bytes[0:nameLen]), "\000")
 			}
 
 			event := newEvent(name, mask)
