@@ -259,25 +259,26 @@ func (w *Watcher) readEvents() {
 			// the "Name" field with a valid filename. We retrieve the path of the watch from
 			// the "paths" map.
 			w.mu.Lock()
-			name, ok := w.paths[int(raw.Wd)]
+			path, ok := w.paths[int(raw.Wd)]
 			// IN_DELETE_SELF occurs when the file/directory being watched is removed.
 			// This is a sign to clean up the maps, otherwise we are no longer in sync
 			// with the inotify kernel state which has already deleted the watch
 			// automatically.
 			if ok && mask&unix.IN_DELETE_SELF == unix.IN_DELETE_SELF {
 				delete(w.paths, int(raw.Wd))
-				delete(w.watches, name)
+				delete(w.watches, path)
 			}
 			w.mu.Unlock()
 
+			var name string
 			if nameLen > 0 {
 				// Point "bytes" at the first byte of the filename
 				bytes := (*[unix.PathMax]byte)(unsafe.Pointer(&buf[offset+unix.SizeofInotifyEvent]))
 				// The filename is padded with NULL bytes. TrimRight() gets rid of those.
-				name += "/" + strings.TrimRight(string(bytes[0:nameLen]), "\000")
+				name = strings.TrimRight(string(bytes[0:nameLen]), "\000")
 			}
 
-			event := newEvent(name, mask)
+			event := newEvent(path, name, mask)
 
 			// Send the events that are not ignored on the events channel
 			if !event.ignoreLinux(mask) {
@@ -309,15 +310,15 @@ func (e *Event) ignoreLinux(mask uint32) bool {
 	// event was sent after the DELETE. This ignores that MODIFY and
 	// assumes a DELETE will come or has come if the file doesn't exist.
 	if !(e.Op&Remove == Remove || e.Op&Rename == Rename) {
-		_, statErr := os.Lstat(e.Name)
+		_, statErr := os.Lstat(e.Path + "/" + e.Name)
 		return os.IsNotExist(statErr)
 	}
 	return false
 }
 
 // newEvent returns an platform-independent Event based on an inotify mask.
-func newEvent(name string, mask uint32) Event {
-	e := Event{Name: name}
+func newEvent(path, name string, mask uint32) Event {
+	e := Event{Name: name, Path: path}
 	if mask&unix.IN_CREATE == unix.IN_CREATE || mask&unix.IN_MOVED_TO == unix.IN_MOVED_TO {
 		e.Op |= Create
 	}
